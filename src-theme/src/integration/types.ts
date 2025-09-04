@@ -1,3 +1,19 @@
+
+export interface Metadata {
+    id: string;
+    name: string;
+    version: string;
+    authors: string[];
+    screens: string[];
+    overlays: string[];
+    components: string[];
+    fonts: string[];
+    backgrounds: {
+        name: string;
+        types: string[];
+    }[];
+}
+
 export interface Module {
     name: string;
     category: string;
@@ -336,6 +352,12 @@ export interface GameWindow {
     scaledHeight: number;
     scaleFactor: number;
     guiScale: number;
+}
+
+export interface Theme {
+    name: string;
+    id: string;
+    settings: { [name: string]: any };
 }
 
 export interface Component {

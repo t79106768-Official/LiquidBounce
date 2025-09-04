@@ -45,9 +45,9 @@ object ThemeManager : Configurable("theme") {
     internal val themesFolder = File(ConfigSystem.rootFolder, "themes")
 
     val themes = mutableListOf<Theme>()
-    val themeNames get() = themes.map { theme -> theme.metadata.name }
+    val themeIds get() = themes.map { theme -> theme.metadata.id }
 
-    var currentTheme by text("Theme", "LiquidBounce").onChanged {
+    var currentTheme by text("Theme", "liquidbounce").onChanged {
         // Update integration browser
         RenderSystem.recordRenderCall {
             IntegrationListener.update()
@@ -60,7 +60,7 @@ object ThemeManager : Configurable("theme") {
         private set
 
     val theme: Theme
-        get() = themes.find { theme -> theme.metadata.name.equals(currentTheme, true) }
+        get() = themes.find { theme -> theme.metadata.id.equals(currentTheme, true) }
             ?: includedTheme
 
     private val takesInputHandler = InputAcceptor { mc.currentScreen != null && mc.currentScreen !is ChatScreen }
@@ -83,14 +83,20 @@ object ThemeManager : Configurable("theme") {
         ConfigSystem.root(this)
     }
 
-    fun init() {
+    fun init() = runBlocking {
         // Load default theme
-        Theme(Theme.Origin.RESOURCE, File("liquidbounce")).apply {
-            includedTheme = this
-        }
+        includedTheme = Theme.load(Theme.Origin.RESOURCE, File("liquidbounce"))
     }
 
-    fun load() {
+    suspend fun load() {
+        fun Theme.addIfUnloaded() {
+            if (themes.none { it.metadata.id.equals(this.metadata.id, true) }) {
+                themes += this
+            } else {
+                logger.warn("Theme with ID '${this.metadata.id}' is already loaded, skipping duplicate.")
+            }
+        }
+
         themes.clear()
 
         // 1st priority
@@ -102,13 +108,8 @@ object ThemeManager : Configurable("theme") {
                 }
 
                 runCatching {
-                    val theme = Theme(Theme.Origin.LOCAL, file.relativeTo(themesFolder))
-                    if (themes.any { it.metadata.name.equals(theme.metadata.name, true) }) {
-                        logger.warn("Theme with name '${theme.metadata.name}' is already loaded, skipping duplicate.")
-                        return@forEach
-                    }
-
-                    themes += theme
+                    Theme.load(Theme.Origin.LOCAL, file.relativeTo(themesFolder))
+                        .addIfUnloaded()
                 }.onFailure { err ->
                     logger.error("Failed to load theme '${file.name}'.", err)
                 }
@@ -119,14 +120,8 @@ object ThemeManager : Configurable("theme") {
             runCatching {
                 val installationFolder = item.getInstallationFolder() ?: return@forEach
                 val relativeFile = installationFolder.relativeTo(MarketplaceManager.marketplaceRoot)
-                val theme = Theme(Theme.Origin.MARKETPLACE, relativeFile)
-
-                if (themes.any { it.metadata.name.equals(theme.metadata.name, true) }) {
-                    logger.warn("Theme with name '${theme.metadata.name}' is already loaded, skipping duplicate.")
-                    return@forEach
-                }
-
-                themes += theme
+                Theme.load(Theme.Origin.MARKETPLACE, relativeFile)
+                    .addIfUnloaded()
             }.onFailure { err ->
                 logger.error("Failed to load theme '${item.name}'.", err)
             }
@@ -134,7 +129,7 @@ object ThemeManager : Configurable("theme") {
 
         themes.add(includedTheme)
 
-        ModuleHud.updateComponents()
+        ModuleHud.updateThemes()
         if (LiquidBounce.isInitialized) {
             IntegrationListener.update()
             ModuleHud.reopen()
